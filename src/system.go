@@ -322,6 +322,8 @@ type System struct {
 	roundType       [2]RoundType
 	timerStart      int32
 	timerRounds     []int32
+	timerFrozen     bool
+	timerVal        string
 	scoreStart      [2]float32
 	scoreRounds     [][2]float32
 	matchData       *lua.LTable
@@ -556,7 +558,7 @@ func (s *System) tickSound() {
 		if s.bgm.ctrl != nil && s.bgm.streamer != nil {
 			s.bgm.ctrl.Paused = false
 			// if s.bgm.bgmLoopEnd > 0 && s.bgm.streamer.Position() >= s.bgm.bgmLoopEnd {
-				// s.bgm.streamer.Seek(s.bgm.bgmLoopStart)
+			// s.bgm.streamer.Seek(s.bgm.bgmLoopStart)
 			// }
 		}
 		speaker.Unlock()
