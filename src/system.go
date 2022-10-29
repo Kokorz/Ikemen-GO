@@ -558,7 +558,7 @@ func (s *System) tickSound() {
 		if s.bgm.ctrl != nil && s.bgm.streamer != nil {
 			s.bgm.ctrl.Paused = false
 			// if s.bgm.bgmLoopEnd > 0 && s.bgm.streamer.Position() >= s.bgm.bgmLoopEnd {
-			// s.bgm.streamer.Seek(s.bgm.bgmLoopStart)
+				// s.bgm.streamer.Seek(s.bgm.bgmLoopStart)
 			// }
 		}
 		speaker.Unlock()
