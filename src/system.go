@@ -18,7 +18,6 @@ import (
 
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/speaker"
-	glfw "github.com/fyne-io/glfw-js"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -53,7 +52,7 @@ var sys = System{
 	allPalFX:          *newPalFX(),
 	bgPalFX:           *newPalFX(),
 	sel:               *newSelect(),
-	keyState:          make(map[glfw.Key]bool),
+	keyState:          make(map[Key]bool),
 	match:             1,
 	listenPort:        "7500",
 	loader:            *newLoader(),
@@ -71,7 +70,7 @@ var sys = System{
 	mainThreadTask:        make(chan func(), 65536),
 	workpal:               make([]uint32, 256),
 	errLog:                log.New(NewLogWriter(), "", log.LstdFlags),
-	keyInput:              glfw.KeyUnknown,
+	keyInput:              KeyUnknown,
 	wavChannels:           256,
 	comboExtraFrameWindow: 1,
 	fontShaderVer:         120,
@@ -124,7 +123,7 @@ type System struct {
 	allPalFX, bgPalFX       PalFX
 	lifebar                 Lifebar
 	sel                     Select
-	keyState                map[glfw.Key]bool
+	keyState                map[Key]bool
 	netInput                *NetInput
 	fileInput               *FileInput
 	aiInput                 [MaxSimul*2 + MaxAttachedChar]AiInput
@@ -262,7 +261,7 @@ type System struct {
 	allowDebugMode          bool
 	commonAir               string
 	commonCmd               string
-	keyInput                glfw.Key
+	keyInput                Key
 	keyString               string
 	timerCount              []int32
 	cmdFlags                map[string]string
@@ -317,6 +316,7 @@ type System struct {
 
 	gameMode        string
 	frameCounter    int32
+	preFightTime    int32
 	motifDir        string
 	captureNum      int
 	roundType       [2]RoundType
@@ -529,6 +529,9 @@ func (s *System) await(fps int) bool {
 
 func (s *System) update() bool {
 	s.frameCounter++
+	if s.gameTime == 0 {
+		s.preFightTime = s.frameCounter
+	}
 	if s.fileInput != nil {
 		if s.anyHardButton() {
 			s.await(FPS * 4)
@@ -558,7 +561,7 @@ func (s *System) tickSound() {
 		if s.bgm.ctrl != nil && s.bgm.streamer != nil {
 			s.bgm.ctrl.Paused = false
 			// if s.bgm.bgmLoopEnd > 0 && s.bgm.streamer.Position() >= s.bgm.bgmLoopEnd {
-				// s.bgm.streamer.Seek(s.bgm.bgmLoopStart)
+			// s.bgm.streamer.Seek(s.bgm.bgmLoopStart)
 			// }
 		}
 		speaker.Unlock()
