@@ -644,7 +644,7 @@ func (a *Animation) drawSub1(angle, facing float32) (h, v, agl float32) {
 	agl += a.angle * facing
 	return
 }
-func (a *Animation) Draw(window *[4]int32, x, y, xcs, ycs, xs, xbs, ys,
+func (a *Animation) Draw(b *BatchData, window *[4]int32, x, y, xcs, ycs, xs, xbs, ys,
 	rxadd float32, rot Rotation, rcx float32, pfx *PalFX, old bool, facing float32, isReflection bool, posLocalscl float32, projectionMode int32, fLength float32) {
 	if a.spr == nil || a.spr.Tex == nil {
 		return
@@ -712,9 +712,9 @@ func (a *Animation) Draw(window *[4]int32, x, y, xcs, ycs, xs, xbs, ys,
 		xs * posLocalscl * (float32(a.frames[a.drawidx].X) + a.interpolate_offset_x) * a.start_scale[0] * (1 / a.scale_x) * sys.widthScale,
 		ys * posLocalscl * (float32(a.frames[a.drawidx].Y) + a.interpolate_offset_y) * a.start_scale[1] * (1 / a.scale_y) * sys.heightScale,
 	}
-	RenderSprite(rp)
+	RenderSprite(b, rp)
 }
-func (a *Animation) ShadowDraw(window *[4]int32, x, y, xscl, yscl, vscl, rxadd float32, rot Rotation,
+func (a *Animation) ShadowDraw(b *BatchData, window *[4]int32, x, y, xscl, yscl, vscl, rxadd float32, rot Rotation,
 	pfx *PalFX, old bool, color uint32, alpha int32, facing float32, posLocalscl float32, projectionMode int32, fLength float32) {
 	if a.spr == nil || a.spr.Tex == nil {
 		return
@@ -756,11 +756,11 @@ func (a *Animation) ShadowDraw(window *[4]int32, x, y, xscl, yscl, vscl, rxadd f
 
 	if color != 0 {
 		rp.trans = -2
-		RenderSprite(rp)
+		RenderSprite(b, rp)
 	}
 	if alpha > 0 {
 		rp.trans = (256-alpha)<<10 | 1<<9
-		RenderSprite(rp)
+		RenderSprite(b, rp)
 	}
 }
 
@@ -861,7 +861,7 @@ func (dl *DrawList) add(sd *SprData, sc, salp int32, so, fo float32) {
 		sys.shadows.add(&ShadowSprite{sd, sc, salp, so, fo})
 	}
 }
-func (dl DrawList) draw(x, y, scl float32) {
+func (dl DrawList) draw(b *BatchData, x, y, scl float32) {
 	for _, s := range dl {
 		s.anim.srcAlpha, s.anim.dstAlpha = int16(s.alpha[0]), int16(s.alpha[1])
 		ob := sys.brightness
@@ -891,10 +891,10 @@ func (dl DrawList) draw(x, y, scl float32) {
 			window[1] = int32(cs * (p[1] + float32(w[1])) * sys.heightScale)
 			window[2] = int32(cs * (w[2] - w[0]) * sys.widthScale)
 			window[3] = int32(cs * (w[3] - w[1]) * sys.heightScale)
-			s.anim.Draw(&window, p[0], p[1], cs, cs, s.scl[0], s.scl[0],
+			s.anim.Draw(b, &window, p[0], p[1], cs, cs, s.scl[0], s.scl[0],
 				s.scl[1], 0, s.rot, float32(sys.gameWidth)/2, s.fx, s.oldVer, s.facing, false, s.posLocalscl, s.projection, s.fLength)
 		} else {
-			s.anim.Draw(&sys.scrrect, p[0], p[1], cs, cs, s.scl[0], s.scl[0],
+			s.anim.Draw(b, &sys.scrrect, p[0], p[1], cs, cs, s.scl[0], s.scl[0],
 				s.scl[1], 0, s.rot, float32(sys.gameWidth)/2, s.fx, s.oldVer, s.facing, false, s.posLocalscl, s.projection, s.fLength)
 		}
 		sys.brightness = ob
@@ -928,7 +928,7 @@ func (sl *ShadowList) add(ss *ShadowSprite) {
 	copy((*sl)[i+1:], (*sl)[i:])
 	(*sl)[i] = ss
 }
-func (sl ShadowList) draw(x, y, scl float32) {
+func (sl ShadowList) draw(b *BatchData, x, y, scl float32) {
 	for _, s := range sl {
 		intensity := sys.stage.sdw.intensity
 		color, alpha := s.shadowColor, s.shadowAlpha
@@ -974,13 +974,13 @@ func (sl ShadowList) draw(x, y, scl float32) {
 			window[1] = int32((sys.cam.GroundLevel() + sys.cam.Offset[1] - sys.envShake.getOffset() - (y+s.pos[1]*sys.stage.sdw.yscale-s.offsetY)*scl + w[1]*sys.stage.sdw.yscale*scl) * sys.heightScale)
 			window[2] = int32(scl * (w[2] - w[0]) * sys.widthScale)
 			window[3] = int32(scl * (w[3] - w[1]) * sys.heightScale * sys.stage.sdw.yscale)
-			s.anim.ShadowDraw(&window, sys.cam.Offset[0]-(x-s.pos[0]-xshearoff)*scl,
+			s.anim.ShadowDraw(b, &window, sys.cam.Offset[0]-(x-s.pos[0]-xshearoff)*scl,
 				sys.cam.GroundLevel()+sys.cam.Offset[1]-sys.envShake.getOffset()-
 					(y+s.pos[1]*sys.stage.sdw.yscale-s.offsetY)*scl,
 				scl*s.scl[0], scl*-s.scl[1], sys.stage.sdw.yscale, xshear, s.rot,
 				&sys.bgPalFX, s.oldVer, uint32(color), intensity, s.facing, s.posLocalscl, s.projection, s.fLength)
 		} else {
-			s.anim.ShadowDraw(&sys.scrrect, sys.cam.Offset[0]-(x-s.pos[0]-xshearoff)*scl,
+			s.anim.ShadowDraw(b, &sys.scrrect, sys.cam.Offset[0]-(x-s.pos[0]-xshearoff)*scl,
 				sys.cam.GroundLevel()+sys.cam.Offset[1]-sys.envShake.getOffset()-
 					(y+s.pos[1]*sys.stage.sdw.yscale-s.offsetY)*scl,
 				scl*s.scl[0], scl*-s.scl[1], sys.stage.sdw.yscale, xshear, s.rot,
@@ -988,7 +988,7 @@ func (sl ShadowList) draw(x, y, scl float32) {
 		}
 	}
 }
-func (sl ShadowList) drawReflection(x, y, scl float32) {
+func (sl ShadowList) drawReflection(b *BatchData, x, y, scl float32) {
 	for _, s := range sl {
 		if s.alpha[0] < 0 {
 			s.anim.srcAlpha = int16(s.anim.interpolate_blend_srcalpha)
@@ -1021,12 +1021,12 @@ func (sl ShadowList) drawReflection(x, y, scl float32) {
 			window[2] = int32(scl * (w[2] - w[0]) * sys.widthScale)
 			window[3] = int32(scl * (w[3] - w[1]) * sys.heightScale)
 
-			s.anim.Draw(&window, sys.cam.Offset[0]/scl-(x-s.pos[0]),
+			s.anim.Draw(b, &window, sys.cam.Offset[0]/scl-(x-s.pos[0]),
 				(sys.cam.GroundLevel()+sys.cam.Offset[1]-sys.envShake.getOffset())/scl-
 					(y+s.pos[1]-s.offsetY), scl, scl, s.scl[0], s.scl[0], -s.scl[1], 0,
 				s.rot, float32(sys.gameWidth)/2, s.fx, s.oldVer, s.facing, true, s.posLocalscl, s.projection, s.fLength)
 		} else {
-			s.anim.Draw(&sys.scrrect, sys.cam.Offset[0]/scl-(x-s.pos[0]),
+			s.anim.Draw(b, &sys.scrrect, sys.cam.Offset[0]/scl-(x-s.pos[0]),
 				(sys.cam.GroundLevel()+sys.cam.Offset[1]-sys.envShake.getOffset())/scl-
 					(y+s.pos[1]-s.offsetY), scl, scl, s.scl[0], s.scl[0], -s.scl[1], 0,
 				s.rot, float32(sys.gameWidth)/2, s.fx, s.oldVer, s.facing, true, s.posLocalscl, s.projection, s.fLength)
@@ -1088,9 +1088,9 @@ func (a *Anim) Update() {
 	a.palfx.step()
 	a.anim.Action()
 }
-func (a *Anim) Draw() {
+func (a *Anim) Draw(b *BatchData) {
 	if !sys.frameSkip {
-		a.anim.Draw(&a.window, a.x+float32(sys.gameWidth-320)/2,
+		a.anim.Draw(b, &a.window, a.x+float32(sys.gameWidth-320)/2,
 			a.y+float32(sys.gameHeight-240), 1, 1, a.xscl, a.xscl, a.yscl,
 			0, Rotation{}, 0, a.palfx, false, 1, false, 1, 0, 0)
 	}

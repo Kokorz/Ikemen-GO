@@ -371,6 +371,7 @@ type System struct {
 
 // Initialize stuff, this is called after the config int at main.go
 func (s *System) init(w, h int32) *lua.LState {
+	b := NewBatchData()
 	s.setWindowSize(w, h)
 	var err error
 	// Create a system window.
@@ -433,7 +434,7 @@ func (s *System) init(w, h int32) *lua.LState {
 	s.clsnSpr = *newSprite()
 	s.clsnSpr.Size, s.clsnSpr.Pal = [...]uint16{1, 1}, make([]uint32, 256)
 	s.clsnSpr.SetPxl([]byte{0})
-	systemScriptInit(l)
+	systemScriptInit(b, l)
 	s.shortcutScripts = make(map[ShortcutKey]*ShortcutScript)
 	// So now that we have a window we add a icon.
 	if len(s.windowMainIconLocation) > 0 {
@@ -994,7 +995,7 @@ func (s *System) posReset() { // unused after nointroreset update
 		}
 	}
 }
-func (s *System) action() {
+func (s *System) action(b *BatchData) {
 	s.sprites = s.sprites[:0]
 	s.topSprites = s.topSprites[:0]
 	s.bottomSprites = s.bottomSprites[:0]
@@ -1331,7 +1332,7 @@ func (s *System) action() {
 	} else {
 		s.charUpdate(&cvmin, &cvmax, &highest, &lowest, &leftest, &rightest)
 	}
-	s.lifebar.step()
+	s.lifebar.step(b)
 
 	// Set global First Attack flag if either team got it
 	if s.firstAttack[0] >= 0 || s.firstAttack[1] >= 0 {
@@ -1453,7 +1454,7 @@ func (s *System) action() {
 	s.tickSound()
 	return
 }
-func (s *System) draw(x, y, scl float32) {
+func (s *System) draw(b *BatchData, x, y, scl float32) {
 	ecol := uint32(s.envcol[2]&0xff | s.envcol[1]&0xff<<8 |
 		s.envcol[0]&0xff<<16)
 	s.brightnessOld = s.brightness
@@ -1475,22 +1476,22 @@ func (s *System) draw(x, y, scl float32) {
 				}
 				c = uint32(rgb[2] | rgb[1]<<8 | rgb[0]<<16)
 			}
-			FillRect(s.scrrect, c, 0xff)
+			FillRect(b, s.scrrect, c, 0xff)
 		} else {
 			if s.stage.debugbg {
-				FillRect(s.scrrect, 0xff00ff, 0xff)
+				FillRect(b, s.scrrect, 0xff00ff, 0xff)
 			} else {
 				c = uint32(s.stage.bgclearcolor[2]&0xff | s.stage.bgclearcolor[1]&0xff<<8 | s.stage.bgclearcolor[0]&0xff<<16)
-				FillRect(s.scrrect, c, 0xff)
+				FillRect(b, s.scrrect, c, 0xff)
 			}
-			s.stage.draw(false, bgx, bgy, scl)
+			s.stage.draw(b, false, bgx, bgy, scl)
 		}
-		s.bottomSprites.draw(x, y, scl*s.cam.BaseScale())
+		s.bottomSprites.draw(b, x, y, scl*s.cam.BaseScale())
 		if !s.sf(GSF_globalnoshadow) {
 			if s.stage.reflection > 0 {
-				s.shadows.drawReflection(x, y, scl*s.cam.BaseScale())
+				s.shadows.drawReflection(b, x, y, scl*s.cam.BaseScale())
 			}
-			s.shadows.draw(x, y, scl*s.cam.BaseScale())
+			s.shadows.draw(b, x, y, scl*s.cam.BaseScale())
 		}
 		//off := s.envShake.getOffset()
 		//yofs, yofs2 := float32(s.gameHeight), float32(0)
@@ -1525,24 +1526,24 @@ func (s *System) draw(x, y, scl float32) {
 		//	rect[0] = s.scrrect[2] - rect[2]
 		//	fade(rect, 0, 255)
 		//}
-		s.lifebar.draw(-1)
-		s.lifebar.draw(0)
+		s.lifebar.draw(b, -1)
+		s.lifebar.draw(b, 0)
 	} else {
-		FillRect(s.scrrect, ecol, 255)
+		FillRect(b, s.scrrect, ecol, 255)
 	}
 	if s.envcol_time == 0 || s.envcol_under {
-		s.sprites.draw(x, y, scl*s.cam.BaseScale())
+		s.sprites.draw(b, x, y, scl*s.cam.BaseScale())
 		if s.envcol_time == 0 && !s.sf(GSF_nofg) {
-			s.stage.draw(true, bgx, bgy, scl)
+			s.stage.draw(b, true, bgx, bgy, scl)
 		}
 	}
-	s.lifebar.draw(1)
-	s.topSprites.draw(x, y, scl*s.cam.BaseScale())
-	s.lifebar.draw(2)
+	s.lifebar.draw(b, 1)
+	s.topSprites.draw(b, x, y, scl*s.cam.BaseScale())
+	s.lifebar.draw(b, 2)
 }
-func (s *System) drawTop() {
+func (s *System) drawTop(b *BatchData) {
 	fade := func(rect [4]int32, color uint32, alpha int32) {
-		FillRect(rect, color, alpha>>uint(Btoi(s.clsnDraw))+Btoi(s.clsnDraw)*128)
+		FillRect(b, rect, color, alpha>>uint(Btoi(s.clsnDraw))+Btoi(s.clsnDraw)*128)
 	}
 	fadeout := s.intro + s.lifebar.ro.over_waittime + s.lifebar.ro.over_time
 	if fadeout == s.lifebar.ro.fadeout_time-1 && len(s.commonLua) > 0 && s.matchOver() && !s.dialogueFlg {
@@ -1579,18 +1580,18 @@ func (s *System) drawTop() {
 	s.brightness = s.brightnessOld
 	if s.clsnDraw {
 		s.clsnSpr.Pal[0] = 0xff0000ff
-		s.drawc1.draw(0x3feff)
+		s.drawc1.draw(b, 0x3feff)
 		s.clsnSpr.Pal[0] = 0xffff0000
-		s.drawc2.draw(0x3feff)
+		s.drawc2.draw(b, 0x3feff)
 		s.clsnSpr.Pal[0] = 0xff00ff00
-		s.drawc2sp.draw(0x3feff)
+		s.drawc2sp.draw(b, 0x3feff)
 		s.clsnSpr.Pal[0] = 0xff002000
-		s.drawc2mtk.draw(0x3feff)
+		s.drawc2mtk.draw(b, 0x3feff)
 		s.clsnSpr.Pal[0] = 0xff404040
-		s.drawwh.draw(0x3feff)
+		s.drawwh.draw(b, 0x3feff)
 	}
 }
-func (s *System) drawDebug() {
+func (s *System) drawDebug(b *BatchData) {
 	put := func(x, y *float32, txt string) {
 		for txt != "" {
 			w, drawTxt := int32(0), ""
@@ -1605,7 +1606,7 @@ func (s *System) drawDebug() {
 				drawTxt, txt = txt, ""
 			}
 			*y += float32(s.debugFont.fnt.Size[1]) * s.debugFont.yscl / s.heightScale
-			s.debugFont.fnt.Print(drawTxt, *x, *y, s.debugFont.xscl/s.widthScale,
+			s.debugFont.fnt.Print(b, drawTxt, *x, *y, s.debugFont.xscl/s.widthScale,
 				s.debugFont.yscl/s.heightScale, 0, 1, &s.scrrect,
 				s.debugFont.palfx, s.debugFont.frgba)
 		}
@@ -1681,7 +1682,7 @@ func (s *System) drawDebug() {
 	if s.clsnDraw {
 		for _, t := range s.clsnText {
 			s.debugFont.SetColor(t.r, t.g, t.b)
-			s.debugFont.fnt.Print(t.text, t.x, t.y, s.debugFont.xscl/s.widthScale,
+			s.debugFont.fnt.Print(b, t.text, t.x, t.y, s.debugFont.xscl/s.widthScale,
 				s.debugFont.yscl/s.heightScale, 0, 0, &s.scrrect,
 				s.debugFont.palfx, s.debugFont.frgba)
 		}
@@ -1691,7 +1692,7 @@ func (s *System) drawDebug() {
 // Starts and runs gameplay
 // Called to start each match, on hard reset with shift+F4, and
 // at the start of any round where a new character tags in for turns mode
-func (s *System) fight() (reload bool) {
+func (s *System) fight(b *BatchData) (reload bool) {
 	// Reset variables
 	s.gameTime, s.paused, s.accel = 0, false, 1
 	s.aiInput = [len(s.aiInput)]AiInput{}
@@ -2055,7 +2056,7 @@ func (s *System) fight() (reload bool) {
 		s.stage.action()
 
 		// Update game state
-		s.action()
+		s.action(b)
 
 		// F4 pressed to restart round
 		if s.roundResetFlg && !s.postMatchFlg {
@@ -2105,7 +2106,7 @@ func (s *System) fight() (reload bool) {
 				s.zoomPos = [2]float32{0, 0}
 				s.drawScale = s.cam.Scale
 			}
-			s.draw(dx, dy, dscl)
+			s.draw(b, dx, dy, dscl)
 		}
 		//Lua code executed before drawing fade, clsns and debug
 		for _, str := range s.commonLua {
@@ -2115,8 +2116,8 @@ func (s *System) fight() (reload bool) {
 		}
 		// Render debug elements
 		if !s.frameSkip {
-			s.drawTop()
-			s.drawDebug()
+			s.drawTop(b)
+			s.drawDebug(b)
 		}
 
 		// Break if finished

@@ -76,6 +76,36 @@ func (rp *RenderParams) IsValid() bool {
 		rp.rxadd+rp.rot.angle+rp.rcx+rp.rcy)
 }
 
+// BatchData holds the data for batch rendering
+type BatchData struct {
+	sprites []RenderParams
+	rects   []RectParams
+}
+
+// RectParams holds parameters for filling rectangles
+type RectParams struct {
+	rect  [4]int32
+	color uint32
+	trans int32
+}
+
+// NewBatchData initializes a new batch data structure
+func NewBatchData() *BatchData {
+	return &BatchData{}
+}
+
+// AddSprite adds a sprite to the batch data
+func (b *BatchData) AddSprite(sprite RenderParams) {
+	b.sprites = append(b.sprites, sprite)
+}
+
+// AddRect adds a rectangle to the batch data
+func (b *BatchData) AddRect(rect [4]int32, color uint32, trans int32) {
+	b.rects = append(b.rects, RectParams{rect: rect, color: color, trans: trans})
+}
+
+var noTiling = Tiling{}
+
 func drawQuads(modelview mgl.Mat4, x1, y1, x2, y2, x3, y3, x4, y4 float32) {
 	gfx.SetUniformMatrix("modelview", modelview[:])
 	gfx.SetUniformF("x1x2x4x3", x1, x2, x4, x3) // this uniform is optional
@@ -268,58 +298,12 @@ func rmInitSub(rp *RenderParams) {
 	rp.y += rp.rcy
 }
 
-func RenderSprite(rp RenderParams) {
+func RenderSprite(b *BatchData, rp RenderParams) {
 	if !rp.IsValid() {
 		return
 	}
-
 	rmInitSub(&rp)
-
-	neg, grayscale, padd, pmul := false, float32(0), [3]float32{0, 0, 0}, [3]float32{1, 1, 1}
-	tint := [4]float32{float32(rp.tint&0xff) / 255, float32(rp.tint>>8&0xff) / 255,
-		float32(rp.tint>>16&0xff) / 255, float32(rp.tint>>24&0xff) / 255}
-
-	if rp.pfx != nil {
-		neg, grayscale, padd, pmul = rp.pfx.getFcPalFx(rp.trans == -2)
-		if rp.trans == -2 {
-			padd[0], padd[1], padd[2] = -padd[0], -padd[1], -padd[2]
-		}
-	}
-
-	proj := mgl.Ortho(0, float32(sys.scrrect[2]), 0, float32(sys.scrrect[3]), -65535, 65535)
-	modelview := mgl.Translate3D(0, float32(sys.scrrect[3]), 0)
-
-	gfx.Scissor(rp.window[0], rp.window[1], rp.window[2], rp.window[3])
-
-	renderWithBlending(func(eq BlendEquation, src, dst BlendFunc, a float32) {
-
-		gfx.SetPipeline(eq, src, dst)
-
-		gfx.SetUniformMatrix("projection", proj[:])
-		gfx.SetTexture("tex", rp.tex)
-		if rp.paltex == nil {
-			gfx.SetUniformI("isRgba", 1)
-		} else {
-			gfx.SetTexture("pal", rp.paltex)
-			gfx.SetUniformI("isRgba", 0)
-			gfx.SetUniformI("mask", int(rp.mask))
-		}
-		gfx.SetUniformI("isTrapez", int(Btoi(AbsF(AbsF(rp.xts)-AbsF(rp.xbs)) > 0.001)))
-		gfx.SetUniformI("isFlat", 0)
-
-		gfx.SetUniformI("neg", int(Btoi(neg)))
-		gfx.SetUniformF("gray", grayscale)
-		gfx.SetUniformFv("add", padd[:])
-		gfx.SetUniformFv("mult", pmul[:])
-		gfx.SetUniformFv("tint", tint[:])
-		gfx.SetUniformF("alpha", a)
-
-		rmTileSub(modelview, rp)
-
-		gfx.ReleasePipeline()
-	}, rp.trans, rp.paltex != nil)
-
-	gfx.DisableScissor()
+	b.AddSprite(rp)
 }
 
 func renderWithBlending(render func(eq BlendEquation, src, dst BlendFunc, a float32), trans int32, correctAlpha bool) {
@@ -348,30 +332,39 @@ func renderWithBlending(render func(eq BlendEquation, src, dst BlendFunc, a floa
 	}
 }
 
-func FillRect(rect [4]int32, color uint32, trans int32) {
-	r := float32(color>>16&0xff) / 255
-	g := float32(color>>8&0xff) / 255
-	b := float32(color&0xff) / 255
+// FillRect adds a rectangle to the batch data
+func FillRect(b *BatchData, rect [4]int32, color uint32, trans int32) {
+	b.AddRect(rect, color, trans)
+}
 
-	modelview := mgl.Translate3D(0, float32(sys.scrrect[3]), 0)
+// RenderBatch performs the draw call to render all objects in the batch data
+func RenderBatch(b *BatchData) {
 	proj := mgl.Ortho(0, float32(sys.scrrect[2]), 0, float32(sys.scrrect[3]), -65535, 65535)
+	modelview := mgl.Translate3D(0, float32(sys.scrrect[3]), 0)
 
-	x1, y1 := float32(rect[0]), -float32(rect[1])
-	x2, y2 := float32(rect[0]+rect[2]), -float32(rect[1]+rect[3])
+	gfx.Scissor(0, 0, sys.scrrect[2], sys.scrrect[3])
 
 	renderWithBlending(func(eq BlendEquation, src, dst BlendFunc, a float32) {
 		gfx.SetPipeline(eq, src, dst)
-		gfx.SetVertexData(
-			x2, y2, 1, 1,
-			x2, y1, 1, 0,
-			x1, y2, 0, 1,
-			x1, y1, 0, 0)
-
-		gfx.SetUniformMatrix("modelview", modelview[:])
 		gfx.SetUniformMatrix("projection", proj[:])
-		gfx.SetUniformI("isFlat", 1)
-		gfx.SetUniformF("tint", r, g, b, a)
-		gfx.RenderQuad()
+		gfx.SetUniformMatrix("modelview", modelview[:])
+
+		// Render sprites
+		for _, sprite := range b.sprites {
+			rmTileSub(modelview, sprite)
+		}
+
+		// Render rectangles
+		for _, rectParams := range b.rects {
+			FillRect(b, rectParams.rect, rectParams.color, rectParams.trans)
+		}
+
 		gfx.ReleasePipeline()
-	}, trans, true)
+	}, int32(BlendOne), true)
+
+	gfx.DisableScissor()
+
+	// Clear the batch data for the next frame
+	b.sprites = nil
+	b.rects = nil
 }

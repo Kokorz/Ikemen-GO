@@ -54,7 +54,7 @@ func userDataError(l *lua.LState, argi int, udtype interface{}) {
 
 // -------------------------------------------------------------------------------------------------
 // Register external functions to be called from Lua scripts
-func systemScriptInit(l *lua.LState) {
+func systemScriptInit(batch *BatchData, l *lua.LState) {
 	triggerFunctions(l)
 	luaRegister(l, "addChar", func(l *lua.LState) int {
 		for _, c := range strings.Split(strings.TrimSpace(strArg(l, 1)), "\n") {
@@ -100,7 +100,7 @@ func systemScriptInit(l *lua.LState) {
 		if !ok {
 			userDataError(l, 1, a)
 		}
-		a.Draw()
+		a.Draw(batch)
 		return 0
 	})
 	luaRegister(l, "animGetLength", func(*lua.LState) int {
@@ -385,7 +385,7 @@ func systemScriptInit(l *lua.LState) {
 		if l.GetTop() >= 5 {
 			scl = float32(numArg(l, 5))
 		}
-		bg.draw(top, x, y, scl)
+		bg.draw(batch, top, x, y, scl)
 		return 0
 	})
 	luaRegister(l, "bgNew", func(*lua.LState) int {
@@ -562,7 +562,7 @@ func systemScriptInit(l *lua.LState) {
 						if sprite.coldepth <= 8 && sprite.PalTex == nil {
 							sprite.CachePalette(sprite.Pal)
 						}
-						sprite.Draw(x, y, scale[0]*float32(facing)*fscale, scale[1]*fscale,
+						sprite.Draw(batch, x, y, scale[0]*float32(facing)*fscale, scale[1]*fscale,
 							0, pfx, window)
 						ok = true
 					}
@@ -594,7 +594,7 @@ func systemScriptInit(l *lua.LState) {
 		}
 		col := uint32(int32(numArg(l, 3))&0xff | int32(numArg(l, 2))&0xff<<8 |
 			int32(numArg(l, 1))&0xff<<16)
-		FillRect(sys.scrrect, col, a)
+		FillRect(batch, sys.scrrect, col, a)
 		return 0
 	})
 	luaRegister(l, "clearConsole", func(*lua.LState) int {
@@ -758,7 +758,7 @@ func systemScriptInit(l *lua.LState) {
 	luaRegister(l, "fade", func(l *lua.LState) int {
 		rect := [4]int32{int32(numArg(l, 1)), int32(numArg(l, 2)), int32(numArg(l, 3)), int32(numArg(l, 4))}
 		alpha := int32(numArg(l, 5))
-		FillRect(rect, 0, alpha>>uint(Btoi(sys.clsnDraw))+Btoi(sys.clsnDraw)*128)
+		FillRect(batch, rect, 0, alpha>>uint(Btoi(sys.clsnDraw))+Btoi(sys.clsnDraw)*128)
 		return 0
 	})
 	luaRegister(l, "fadeColor", func(l *lua.LState) int {
@@ -785,7 +785,7 @@ func systemScriptInit(l *lua.LState) {
 			b = int32(numArg(l, 6))
 		}
 		col := uint32(int32(b)&0xff | int32(g)&0xff<<8 | int32(r)&0xff<<16)
-		FillRect(sys.scrrect, col, int32(a))
+		FillRect(batch, sys.scrrect, col, int32(a))
 		l.Push(lua.LBool(true))
 		return 1
 	})
@@ -796,7 +796,7 @@ func systemScriptInit(l *lua.LState) {
 			int32((float32(numArg(l, 4)) / sys.luaSpriteScale) * sys.heightScale)}
 		col := uint32(int32(numArg(l, 7))&0xff | int32(numArg(l, 6))&0xff<<8 | int32(numArg(l, 5))&0xff<<16)
 		a := int32(int32(numArg(l, 8))&0xff | int32(numArg(l, 9))&0xff<<10)
-		FillRect(rect, col, a)
+		FillRect(batch, rect, col, a)
 		return 0
 	})
 	luaRegister(l, "fontGetDef", func(l *lua.LState) int {
@@ -976,7 +976,7 @@ func systemScriptInit(l *lua.LState) {
 				winp := int32(0)
 
 				//fight loop
-				if sys.fight() {
+				if sys.fight(batch) {
 					// Match is restarting
 					for i, b := range sys.reloadCharSlot {
 						if b {
@@ -2366,7 +2366,7 @@ func systemScriptInit(l *lua.LState) {
 		if !ok {
 			userDataError(l, 1, ts)
 		}
-		ts.Draw()
+		ts.Draw(batch)
 		return 0
 	})
 	luaRegister(l, "textImgNew", func(*lua.LState) int {
