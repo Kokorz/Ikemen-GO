@@ -54,8 +54,7 @@ func userDataError(l *lua.LState, argi int, udtype interface{}) {
 
 // -------------------------------------------------------------------------------------------------
 // Register external functions to be called from Lua scripts
-func systemScriptInit(l *lua.LState) {
-	batch := NewBatchData()
+func systemScriptInit(batch *BatchData, l *lua.LState) {
 	triggerFunctions(l)
 	luaRegister(l, "addChar", func(l *lua.LState) int {
 		for _, c := range strings.Split(strings.TrimSpace(strArg(l, 1)), "\n") {

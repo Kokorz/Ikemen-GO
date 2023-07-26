@@ -104,6 +104,8 @@ func (b *BatchData) AddRect(rect [4]int32, color uint32, trans int32) {
 	b.rects = append(b.rects, RectParams{rect: rect, color: color, trans: trans})
 }
 
+var noTiling = Tiling{}
+
 func drawQuads(modelview mgl.Mat4, x1, y1, x2, y2, x3, y3, x4, y4 float32) {
 	gfx.SetUniformMatrix("modelview", modelview[:])
 	gfx.SetUniformF("x1x2x4x3", x1, x2, x4, x3) // this uniform is optional

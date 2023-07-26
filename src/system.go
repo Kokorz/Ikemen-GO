@@ -371,6 +371,7 @@ type System struct {
 
 // Initialize stuff, this is called after the config int at main.go
 func (s *System) init(w, h int32) *lua.LState {
+	b := NewBatchData()
 	s.setWindowSize(w, h)
 	var err error
 	// Create a system window.
@@ -433,7 +434,7 @@ func (s *System) init(w, h int32) *lua.LState {
 	s.clsnSpr = *newSprite()
 	s.clsnSpr.Size, s.clsnSpr.Pal = [...]uint16{1, 1}, make([]uint32, 256)
 	s.clsnSpr.SetPxl([]byte{0})
-	systemScriptInit(l)
+	systemScriptInit(b, l)
 	s.shortcutScripts = make(map[ShortcutKey]*ShortcutScript)
 	// So now that we have a window we add a icon.
 	if len(s.windowMainIconLocation) > 0 {
