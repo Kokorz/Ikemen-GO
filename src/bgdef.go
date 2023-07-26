@@ -280,14 +280,14 @@ func (s *BGDef) action() {
 		}
 	}
 }
-func (s *BGDef) draw(bt *BatchData, top bool, x, y, scl float32) {
+func (s *BGDef) draw(top bool, x, y, scl float32) {
 	if !top {
 		s.action()
 	}
 	//x, y = x/s.localscl, y/s.localscl
 	for _, b := range s.bg {
 		if b.visible && b.toplayer == top && b.anim.spr != nil {
-			b.draw(bt, [...]float32{x, y}, scl, s.localscl, 1, s.scale, 0, false)
+			b.draw([...]float32{x, y}, scl, s.localscl, 1, s.scale, 0, false)
 		}
 	}
 }

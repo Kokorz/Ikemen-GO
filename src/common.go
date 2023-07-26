@@ -621,7 +621,7 @@ func (l *Layout) Read(pre string, is IniSection) {
 		l.window = sys.scrrect
 	}
 }
-func (l *Layout) DrawSprite(b *BatchData, x, y float32, ln int16, s *Sprite, fx *PalFX, fscale float32, window *[4]int32) {
+func (l *Layout) DrawSprite(x, y float32, ln int16, s *Sprite, fx *PalFX, fscale float32, window *[4]int32) {
 	if l.layerno == ln && s != nil {
 		//TODO: test "phantom pixel"
 		if l.facing < 0 {
@@ -633,12 +633,12 @@ func (l *Layout) DrawSprite(b *BatchData, x, y float32, ln int16, s *Sprite, fx 
 		if s.coldepth <= 8 && s.PalTex == nil {
 			s.CachePalette(s.Pal)
 		}
-		s.Draw(b, x+l.offset[0]*sys.lifebarScale, y+l.offset[1]*sys.lifebarScale,
+		s.Draw(x+l.offset[0]*sys.lifebarScale, y+l.offset[1]*sys.lifebarScale,
 			l.scale[0]*float32(l.facing)*fscale, l.scale[1]*float32(l.vfacing)*fscale,
 			l.angle, fx, window)
 	}
 }
-func (l *Layout) DrawAnim(b *BatchData, r *[4]int32, x, y, scl float32, ln int16,
+func (l *Layout) DrawAnim(r *[4]int32, x, y, scl float32, ln int16,
 	a *Animation, palfx *PalFX) {
 	if l.layerno == ln {
 		//TODO: test "phantom pixel"
@@ -648,14 +648,14 @@ func (l *Layout) DrawAnim(b *BatchData, r *[4]int32, x, y, scl float32, ln int16
 		if l.vfacing < 0 {
 			y += sys.lifebar.fnt_scale
 		}
-		a.Draw(b, r, x+l.offset[0], y+l.offset[1]+float32(sys.gameHeight-240),
+		a.Draw(r, x+l.offset[0], y+l.offset[1]+float32(sys.gameHeight-240),
 			scl, scl, l.scale[0]*float32(l.facing), l.scale[0]*float32(l.facing),
 			l.scale[1]*float32(l.vfacing), 0, Rotation{l.angle, 0, 0},
 			float32(sys.gameWidth-320)/2, palfx, false, 1, false, 1, 0, 0)
 	}
 }
-func (l *Layout) DrawText(b *BatchData, x, y, scl float32, ln int16,
-	text string, f *Fnt, bb, a int32, palfx *PalFX, frgba [4]float32) {
+func (l *Layout) DrawText(x, y, scl float32, ln int16,
+	text string, f *Fnt, b, a int32, palfx *PalFX, frgba [4]float32) {
 	if l.layerno == ln {
 		//TODO: test "phantom pixel"
 		if l.facing < 0 {
@@ -664,9 +664,9 @@ func (l *Layout) DrawText(b *BatchData, x, y, scl float32, ln int16,
 		if l.vfacing < 0 {
 			y += sys.lifebar.fnt_scale
 		}
-		f.Print(b, text, (x+l.offset[0])*scl, (y+l.offset[1])*scl,
+		f.Print(text, (x+l.offset[0])*scl, (y+l.offset[1])*scl,
 			l.scale[0]*sys.lifebar.fnt_scale*float32(l.facing)*scl,
-			l.scale[1]*sys.lifebar.fnt_scale*float32(l.vfacing)*scl, bb, a,
+			l.scale[1]*sys.lifebar.fnt_scale*float32(l.vfacing)*scl, b, a,
 			&l.window, palfx, frgba)
 	}
 }
@@ -714,8 +714,8 @@ func (al *AnimLayout) Action() {
 	}
 	al.anim.Action()
 }
-func (al *AnimLayout) Draw(b *BatchData, x, y float32, layerno int16, scale float32) {
-	al.lay.DrawAnim(b, &al.lay.window, x, y, scale, layerno, &al.anim, al.palfx)
+func (al *AnimLayout) Draw(x, y float32, layerno int16, scale float32) {
+	al.lay.DrawAnim(&al.lay.window, x, y, scale, layerno, &al.anim, al.palfx)
 }
 
 func (al *AnimLayout) ReadAnimPalfx(pre string, is IniSection) {
@@ -802,16 +802,16 @@ func (ats *AnimTextSnd) Action() {
 	ats.anim.Action()
 	ats.cnt++
 }
-func (ats *AnimTextSnd) Draw(b *BatchData, x, y float32, layerno int16, f []*Fnt, scale float32) {
+func (ats *AnimTextSnd) Draw(x, y float32, layerno int16, f []*Fnt, scale float32) {
 	if ats.displaytime > 0 && ats.cnt > ats.displaytime {
 		return
 	}
 	if len(ats.anim.anim.frames) > 0 {
-		ats.anim.Draw(b, x, y, layerno, scale)
+		ats.anim.Draw(x, y, layerno, scale)
 	} else if ats.text.font[0] >= 0 && int(ats.text.font[0]) < len(f) &&
 		len(ats.text.text) > 0 {
 		for k, v := range strings.Split(ats.text.text, "\\n") {
-			ats.text.lay.DrawText(b, x, y+
+			ats.text.lay.DrawText(x, y+
 				float32(k)*(float32(f[ats.text.font[0]].Size[1])*ats.text.lay.scale[1]*sys.lifebar.fnt_scale+
 					float32(f[ats.text.font[0]].Spacing[1])*ats.text.lay.scale[1]*sys.lifebar.fnt_scale),
 				scale, layerno, v, f[ats.text.font[0]], ats.text.font[1], ats.text.font[2], ats.text.palfx,

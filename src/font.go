@@ -423,7 +423,6 @@ func (f *Fnt) getCharSpr(c rune, bank, bt int32) *Sprite {
 }
 
 func (f *Fnt) drawChar(
-	b *BatchData,
 	x, y,
 	xscl, yscl float32,
 	bank, bt int32,
@@ -463,23 +462,23 @@ func (f *Fnt) drawChar(
 		nil, window, 0, 0,
 		0, 0, -xscl * float32(spr.Offset[0]), -yscl * float32(spr.Offset[1]),
 	}
-	RenderSprite(b, rp)
+	RenderSprite(rp)
 	return float32(spr.Size[0]) * xscl
 }
 
-func (f *Fnt) Print(b *BatchData, txt string, x, y, xscl, yscl float32, bank, align int32,
+func (f *Fnt) Print(txt string, x, y, xscl, yscl float32, bank, align int32,
 	window *[4]int32, palfx *PalFX, frgba [4]float32) {
 	if !sys.frameSkip {
 		if f.Type == "truetype" {
 			f.DrawTtf(txt, x, y, xscl, yscl, align, true, window, frgba)
 		} else {
-			f.DrawText(b, txt, x, y, xscl, yscl, bank, align, window, palfx)
+			f.DrawText(txt, x, y, xscl, yscl, bank, align, window, palfx)
 		}
 	}
 }
 
 // DrawText prints on screen a specified text with the current font sprites
-func (f *Fnt) DrawText(b *BatchData, txt string, x, y, xscl, yscl float32, bank, align int32,
+func (f *Fnt) DrawText(txt string, x, y, xscl, yscl float32, bank, align int32,
 	window *[4]int32, palfx *PalFX) {
 
 	if len(txt) == 0 {
@@ -518,7 +517,7 @@ func (f *Fnt) DrawText(b *BatchData, txt string, x, y, xscl, yscl float32, bank,
 
 	f.paltex = nil
 	for _, c := range txt {
-		x += f.drawChar(b, x, y, xscl, yscl, bank, bt, c, pal, window, palfx) + xscl*float32(f.Spacing[0])
+		x += f.drawChar(x, y, xscl, yscl, bank, bt, c, pal, window, palfx) + xscl*float32(f.Spacing[0])
 	}
 }
 
@@ -593,12 +592,12 @@ func (ts *TextSprite) SetColor(r, g, b int32) {
 		float32(b) / 255, 1.0}
 }
 
-func (ts *TextSprite) Draw(b *BatchData) {
+func (ts *TextSprite) Draw() {
 	if !sys.frameSkip && ts.fnt != nil {
 		if ts.fnt.Type == "truetype" {
 			ts.fnt.DrawTtf(ts.text, ts.x, ts.y, ts.xscl, ts.yscl, ts.align, true, &ts.window, ts.frgba)
 		} else {
-			ts.fnt.DrawText(b, ts.text, ts.x, ts.y, ts.xscl, ts.yscl, ts.bank, ts.align, &ts.window, ts.palfx)
+			ts.fnt.DrawText(ts.text, ts.x, ts.y, ts.xscl, ts.yscl, ts.bank, ts.align, &ts.window, ts.palfx)
 		}
 	}
 }

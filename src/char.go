@@ -175,7 +175,7 @@ func (cr *ClsnRect) Add(clsn []float32, x, y, xs, ys float32) {
 		*cr = append(*cr, rect)
 	}
 }
-func (cr ClsnRect) draw(b *BatchData,trans int32) {
+func (cr ClsnRect) draw(trans int32) {
 	paltex := PaletteToTexture(sys.clsnSpr.Pal)
 	for _, c := range cr {
 		params := RenderParams{
@@ -184,7 +184,7 @@ func (cr ClsnRect) draw(b *BatchData,trans int32) {
 			c[2] * sys.widthScale, c[2] * sys.widthScale, c[3] * sys.heightScale,
 			1, 0, Rotation{}, 0, trans, -1, nil, &sys.scrrect, 0, 0, 0, 0, 0, 0,
 		}
-		RenderSprite(b, params)
+		RenderSprite(params)
 	}
 }
 
