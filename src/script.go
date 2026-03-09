@@ -1881,6 +1881,28 @@ func systemScriptInit(l *lua.LState) {
 		sys.replayFile = OpenReplayFile(strArg(l, 1))
 		return 0
 	})
+	luaRegister(l, "playReplay", func(l *lua.LState) int {
+		if sys.cfg.Video.VSync >= 0 {
+			sys.window.SetSwapInterval(1) // broken frame skipping when set to 0
+		}
+		sys.chars = [len(sys.chars)][]*Char{}
+		sys.replayFile = OpenReplayFile(strArg(l, 1))
+		if sys.replayFile == nil {
+			l.Push(lua.LBool(false))
+			return 1
+		}
+		if !sys.replayFile.HasMatchConfig() {
+			l.Push(lua.LBool(false))
+			return 1
+		}
+		if err := sys.replayFile.PlayConfiguredMatch(); err != nil {
+			sys.replayFile.Close()
+			sys.replayFile = nil
+			l.RaiseError(err.Error())
+		}
+		l.Push(lua.LBool(true))
+		return 1
+	})
 	luaRegister(l, "esc", func(l *lua.LState) int {
 		if !nilArg(l, 1) {
 			sys.esc = boolArg(l, 1)
@@ -4300,22 +4322,59 @@ func systemScriptInit(l *lua.LState) {
 		return 0
 	})
 	luaRegister(l, "replayRecord", func(*lua.LState) int {
-		if sys.netConnection != nil {
-			sys.netConnection.recording, _ = os.Create(strArg(l, 1))
-		}
+		sys.replayManager.beginNetplaySession()
 		return 0
 	})
 	luaRegister(l, "replayStop", func(*lua.LState) int {
-		if sys.cfg.Netplay.RollbackNetcode {
-			if sys.rollback.session != nil && sys.rollback.session.recording != nil {
-				sys.rollback.session.recording.Close()
-				sys.rollback.session.recording = nil
-			}
-		} else {
-			if sys.netConnection != nil && sys.netConnection.recording != nil {
-				sys.netConnection.recording.Close()
-				sys.netConnection.recording = nil
-			}
+		if sys.rollback.session != nil {
+			sys.rollback.session.SaveReplay()
+		}
+		sys.replayManager.endNetplaySession()
+		return 0
+	})
+	luaRegister(l, "inputTapeStartRecord", func(l *lua.LState) int {
+		if err := sys.inputTapes.StartRecording(strArg(l, 1), int(numArg(l, 2))-1, int(numArg(l, 3))-1, boolArg(l, 4)); err != nil {
+			l.RaiseError(err.Error())
+		}
+		return 0
+	})
+	luaRegister(l, "inputTapeStopRecord", func(l *lua.LState) int {
+		path, err := sys.inputTapes.StopRecording()
+		if err != nil {
+			l.RaiseError(err.Error())
+		}
+		l.Push(lua.LString(path))
+		return 1
+	})
+	luaRegister(l, "inputTapeStartPlayback", func(l *lua.LState) int {
+		if err := sys.inputTapes.StartPlayback(strArg(l, 1), int(numArg(l, 2))-1, boolArg(l, 3)); err != nil {
+			l.RaiseError(err.Error())
+		}
+		return 0
+	})
+	luaRegister(l, "inputTapeStopPlayback", func(l *lua.LState) int {
+		sys.inputTapes.StopPlayback(int(numArg(l, 1)) - 1)
+		return 0
+	})
+	luaRegister(l, "inputTapeRecordingActive", func(l *lua.LState) int {
+		l.Push(lua.LBool(sys.inputTapes.RecordingActive()))
+		return 1
+	})
+	luaRegister(l, "inputTapePlaybackActive", func(l *lua.LState) int {
+		l.Push(lua.LBool(sys.inputTapes.PlaybackActive(int(numArg(l, 1)) - 1)))
+		return 1
+	})
+	luaRegister(l, "inputTapeRecordingPath", func(l *lua.LState) int {
+		l.Push(lua.LString(sys.inputTapes.RecordingPath()))
+		return 1
+	})
+	luaRegister(l, "inputTapeExists", func(l *lua.LState) int {
+		l.Push(lua.LBool(inputTapeExists(strArg(l, 1))))
+		return 1
+	})
+	luaRegister(l, "inputTapeDelete", func(l *lua.LState) int {
+		if err := deleteInputTape(strArg(l, 1)); err != nil {
+			l.RaiseError(err.Error())
 		}
 		return 0
 	})
@@ -4619,6 +4678,7 @@ func systemScriptInit(l *lua.LState) {
 	})
 	luaRegister(l, "setGameMode", func(*lua.LState) int {
 		sys.gameMode = strArg(l, 1)
+		sys.replayManager.onModeChange(sys.gameMode)
 		return 0
 	})
 	luaRegister(l, "setGuardPoints", func(*lua.LState) int {

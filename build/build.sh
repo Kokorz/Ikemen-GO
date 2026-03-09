@@ -1054,9 +1054,11 @@ function buildWin() {
 
 	echo "==> Building Go binary (this may take a while)..."
 	if [[ "${DEBUG_BUILD:-}" -eq 1 ]]; then
-		# Console subsystem: keep a terminal for logs/panics while debugging
+		# Console subsystem: keep a terminal for logs/panics while debugging.
+		# Preserve symbols and disable optimizations so Delve can inspect state reliably.
 		go build -trimpath -v \
-		  -ldflags "-s -w -X 'main.Version=${APP_VERSION}' -X 'main.BuildTime=${APP_BUILDTIME}'" \
+		  -gcflags "all=-N -l" \
+		  -ldflags "-X 'main.Version=${APP_VERSION}' -X 'main.BuildTime=${APP_BUILDTIME}'" \
 		  -o "$OUTDIR/$binName" ./src
 	else
 		# GUI subsystem: hides console window

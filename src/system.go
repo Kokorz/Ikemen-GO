@@ -67,6 +67,7 @@ var sys = System{
 	saveState:           NewGameState(),
 	statePool:           NewGameStatePool(),
 	savePool:            NewGameStatePool(),
+	replayManager:       ReplayManager{appSessionTimestamp: replayTimestamp(), matchCounters: make(map[string]int)},
 	loadPool:            NewGameStatePool(),
 	luaStringVars:       make(map[string]string),
 	luaNumVars:          make(map[string]float32),
@@ -120,6 +121,11 @@ type System struct {
 	keyState                map[Key]bool
 	netConnection           *NetConnection
 	replayFile              *ReplayFile
+	replayManager           ReplayManager
+	inputTapes              InputTapeManager
+	localFrameInputs        [REPLAY_NUM_INPUTS]ControllerFrameInput
+	localFramePrepared      bool
+	localFramePreparedCount int32
 	aiInput                 [MaxPlayerNo]AiInput
 	ffbparams               [MaxPlayerNo]ForceFeedbackParams
 	keyConfig               []KeyConfig
@@ -515,6 +521,8 @@ func (s *System) shutdown() {
 	if sys.rollback.session != nil && sys.rollback.session.recording != nil {
 		sys.rollback.session.SaveReplay()
 	}
+	sys.replayManager.Shutdown()
+	sys.inputTapes.StopAll()
 	gfx.Close()
 	s.window.Close()
 	if speaker != nil {
@@ -696,7 +704,7 @@ func (s *System) keepAlive() {
 			if ok {
 				loc = fmt.Sprintf("%s:%d", filepath.Base(file), line)
 			}
-			s.errLog.Printf("[keepAlive] #%d Δ=%.3fms total=%.3fs at %s",
+			s.errLog.Printf("[keepAlive] #%d delta=%.3fms total=%.3fs at %s",
 				s.keepAliveCount,
 				float64(delta)/float64(time.Millisecond),
 				float64(total)/float64(time.Second),
@@ -3479,6 +3487,18 @@ func (s *System) runMatch() (reload bool) {
 		}
 	}()
 
+	capture := s.replayManager.BeginMatchCapture()
+	if capture != nil {
+		if s.netConnection != nil {
+			s.netConnection.recording = capture
+		}
+		if s.rollback.session != nil {
+			s.rollback.session.recording = capture
+		}
+	}
+	defer s.replayManager.EndMatchCapture()
+	defer s.clearPreparedLocalControllerFrame()
+
 	// Synchronize with external inputs (netplay, replays, etc)
 	if err := s.synchronize(); err != nil {
 		s.errLog.Println(err.Error())
@@ -3553,7 +3573,9 @@ func (s *System) runMatch() (reload bool) {
 		s.stage.action()
 
 		// Update game state
+		s.prepareLocalControllerFrame()
 		s.action()
+		s.clearPreparedLocalControllerFrame()
 
 		debugInput()
 
@@ -3962,7 +3984,7 @@ func (bk *RoundStartBackup) Restore() {
 				}
 			}
 
-			// Safeguard: if no backup exists for this slot and it’s not the root, destroy the helper
+			// Safeguard: if no backup exists for this slot and it's not the root, destroy the helper
 			if bkup == nil {
 				if j != 0 && c.helperIndex != 0 {
 					c.destroy()

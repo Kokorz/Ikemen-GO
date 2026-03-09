@@ -344,13 +344,21 @@ func writeI32(i32 int32) []byte {
 }
 
 func (rs *RollbackSystem) getInputs(player int) []byte {
+	source := player
+	if rs.netConnection != nil && !rs.session.syncTest {
+		source = rs.netConnection.locIn
+	}
+	if source >= 0 && source < len(sys.inputRemap) && sys.inputRemap[source] >= 0 {
+		source = sys.inputRemap[source]
+	}
+
 	// Digital inputs
 	var ib InputBits
-	ib.KeysToBits(rs.netConnection.buf[player].InputReader.LocalInput(0))
+	ib.KeysToBits(rs.netConnection.buf[player].InputReader.LocalInput(source))
 	bytes := writeI16(int16(ib))
 
 	// Analog inputs
-	sbyteAxes := rs.netConnection.buf[player].InputReader.LocalAnalogInput(0)
+	sbyteAxes := rs.netConnection.buf[player].InputReader.LocalAnalogInput(source)
 	for i := 0; i < len(sbyteAxes); i++ {
 		bytes = append(bytes, byte(sbyteAxes[i]))
 	}

@@ -2697,7 +2697,9 @@ function main.f_replay()
 			path = path:gsub('\\', '/')
 			ext = ext:lower()
 			if ext == 'replay' then
-				table.insert(t, {itemname = path .. filename .. '.' .. ext, displayname = filename})
+				local replayFile = path .. filename .. '.' .. ext
+				local displayName = replayFile:gsub('^save/replays[/\\]?', '')
+				table.insert(t, {itemname = replayFile, displayname = displayName})
 			end
 		end)
 	end
@@ -2730,13 +2732,23 @@ function main.f_replay()
 			t, item = main.f_renameReplay(item, t)
 		elseif getInput(-1, motif[main.group].menu.done.key) then
 			sndPlay(motif.Snd, motif[main.group].cursor.done.snd.default[1], motif[main.group].cursor.done.snd.default[2])
-			enterReplay(t[item].itemname)
-			synchronize()
-			main.f_clearShuffleTables()
-			math.randomseed(sszRandom())
-			main.menu.submenu.server.loop()
-			replayStop()
-			exitNetPlay()
+			local directMatchReplay = playReplay(t[item].itemname)
+			if directMatchReplay then
+				synchronize()
+				main.f_clearShuffleTables()
+				math.randomseed(sszRandom())
+				game()
+				bgReset(motif.replaybgdef.BGDef)
+				main.f_fadeReset('fadein', motif.replay_info)
+				playBgm({source = "motif.replay", interrupt = true})
+			else
+				synchronize()
+				main.f_clearShuffleTables()
+				math.randomseed(sszRandom())
+				main.menu.submenu.server.loop()
+				replayStop()
+				exitNetPlay()
+			end
 			exitReplay()
 		end
 	end

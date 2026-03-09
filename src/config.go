@@ -223,6 +223,11 @@ type Config struct {
 		IP              map[string]string  `ini:"IP"`
 		Rollback        RollbackProperties `ini:"Rollback"`
 	} `ini:"Netplay"`
+	Replay struct {
+		Folder        string   `ini:"Folder"`
+		Recording     string   `ini:"Recording"`
+		DisabledModes []string `ini:"DisabledModes"`
+	} `ini:"Replay"`
 	Input struct {
 		ButtonAssist               bool    `ini:"ButtonAssist"`
 		SOCDResolution             int     `ini:"SOCDResolution"`
@@ -364,6 +369,20 @@ func (c *Config) normalize() {
 			c.SetValueUpdate("Config.ScreenshotFolder", path)
 		}
 	}
+
+	replayFolder := normalizeReplayDir(c.Replay.Folder, "save/replays")
+	if replayFolder != c.Replay.Folder {
+		c.SetValueUpdate("Replay.Folder", replayFolder)
+	}
+	if strings.TrimSpace(strings.ToLower(c.Replay.Recording)) != ReplayRecordModeSession {
+		c.SetValueUpdate("Replay.Recording", ReplayRecordModeMatch)
+	} else {
+		c.SetValueUpdate("Replay.Recording", ReplayRecordModeSession)
+	}
+	for i, mode := range c.Replay.DisabledModes {
+		c.Replay.DisabledModes[i] = strings.TrimSpace(strings.ToLower(mode))
+	}
+	c.SetValueUpdate("Replay.DisabledModes", c.Replay.DisabledModes)
 
 	switch c.Sound.SampleRate {
 	case 22050, 44100, 48000:

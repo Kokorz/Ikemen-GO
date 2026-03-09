@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 	"log"
@@ -1886,34 +1885,7 @@ func (c *Command) GreaterCheckFail(i int, ibuf *InputBuffer) bool {
 const (
 	// This defines the number of frames to store for the net buffer inputs (digital and analog)
 	NETBUF_NUM_FRAMES int32 = 32
-
-	// Replay files store the same payload for both delay-based and rollback netplay:
-	// 2 bytes of digital inputs followed by 6 bytes of signed analog axes per controller.
-	REPLAY_NUM_INPUTS  = MaxSimul * 2
-	REPLAY_INPUT_BYTES = 2 + 6
 )
-
-func writeReplayInput(w io.Writer, ibit InputBits, axes [6]int8) error {
-	var buf [REPLAY_INPUT_BYTES]byte
-	binary.LittleEndian.PutUint16(buf[:2], uint16(ibit))
-	for i := 0; i < len(axes); i++ {
-		buf[2+i] = byte(axes[i])
-	}
-	_, err := w.Write(buf[:])
-	return err
-}
-
-func readReplayInput(r io.Reader, ibit *InputBits, axes *[6]int8) error {
-	var buf [REPLAY_INPUT_BYTES]byte
-	if _, err := io.ReadFull(r, buf[:]); err != nil {
-		return err
-	}
-	*ibit = InputBits(int16(binary.LittleEndian.Uint16(buf[:2])))
-	for i := 0; i < len(axes); i++ {
-		axes[i] = int8(buf[2+i])
-	}
-	return nil
-}
 
 // NetBuffer holds the inputs that are sent between players
 type NetBuffer struct {
@@ -2330,8 +2302,9 @@ func (nc *NetConnection) Synchronize() error {
 
 	// Write seed and pre-match time to replay file
 	if nc.recording != nil {
-		binary.Write(nc.recording, binary.LittleEndian, &seed)
-		binary.Write(nc.recording, binary.LittleEndian, &pmTime)
+		if err := ensureReplayHeader(nc.recording, seed, pmTime); err != nil {
+			return err
+		}
 	}
 
 	// Verify connection time synchronization
@@ -2455,6 +2428,10 @@ func (nc *NetConnection) Update() bool {
 			for {
 				// Determine the earliest frame that has been processed by both local and remote buffers
 				foo := Min(nc.buf[nc.locIn].senT, nc.buf[nc.remIn].senT)
+				localInputSource := nc.locIn
+				if nc.locIn >= 0 && nc.locIn < len(sys.inputRemap) && sys.inputRemap[nc.locIn] >= 0 {
+					localInputSource = sys.inputRemap[nc.locIn]
+				}
 
 				// Calculate network delay difference between local and remote input buffers
 				tmp := nc.buf[nc.remIn].inpT + nc.delay>>3 - nc.buf[nc.locIn].inpT
@@ -2462,7 +2439,7 @@ func (nc *NetConnection) Update() bool {
 				// Adjust local buffer to synchronize with remote
 				if tmp >= 0 {
 					// Local buffer is behind. Advance it
-					nc.buf[nc.locIn].writeNetBuffer(0)
+					nc.buf[nc.locIn].writeNetBuffer(localInputSource)
 					if nc.delay > 0 {
 						nc.delay--
 					}
@@ -2485,13 +2462,15 @@ func (nc *NetConnection) Update() bool {
 
 				// Write inputs to replay file
 				if nc.recording != nil {
-					for i := range nc.buf {
-						ringIdx := nc.time & (NETBUF_NUM_FRAMES - 1)
-						if err := writeReplayInput(nc.recording, nc.buf[i].buf[ringIdx], nc.buf[i].axisBuf[ringIdx]); err != nil {
-							log.Printf("Error while writing replay input for controller %d: %v", i, err)
-							nc.recording = nil
-							break
+					ringIdx := nc.time & (NETBUF_NUM_FRAMES - 1)
+					sys.replayManager.RecordRemappedFrame(func(source int) (ControllerFrameInput, bool) {
+						if source < 0 || source >= len(nc.buf) {
+							return ControllerFrameInput{}, false
 						}
+						return ControllerFrameInput{Bits: nc.buf[source].buf[ringIdx], Axes: nc.buf[source].axisBuf[ringIdx]}, true
+					})
+					if sys.replayManager.activeCapture == nil || sys.replayManager.activeCapture.file == nil {
+						nc.recording = nil
 					}
 				}
 
@@ -2499,7 +2478,7 @@ func (nc *NetConnection) Update() bool {
 
 				// Ensure local buffer writes any remaining frames
 				if nc.time >= foo {
-					nc.buf[nc.locIn].writeNetBuffer(0)
+					nc.buf[nc.locIn].writeNetBuffer(localInputSource)
 				}
 
 				break
@@ -2513,111 +2492,6 @@ func (nc *NetConnection) Update() bool {
 		nc.end()
 	}
 
-	return !sys.gameEnd
-}
-
-type ReplayFile struct {
-	file         *os.File
-	ibit         [REPLAY_NUM_INPUTS]InputBits
-	iaxes        [REPLAY_NUM_INPUTS][6]int8
-	preMatchTime int32
-}
-
-func OpenReplayFile(filename string) *ReplayFile {
-	rf, err := os.Open(filename)
-	if err != nil {
-		log.Printf("Failed to open replay file %s: %v", filename, err)
-		return nil
-	}
-	log.Printf("Replay file opened: %s", filename)
-	return &ReplayFile{file: rf}
-}
-
-func (rf *ReplayFile) Close() {
-	if rf.file != nil {
-		rf.file.Close()
-		rf.file = nil
-	}
-}
-
-// Read input buttons from replay input
-func (rf *ReplayFile) readReplayInput(i int) [14]bool {
-	if i >= 0 && i < len(rf.ibit) {
-		return rf.ibit[sys.inputRemap[i]].BitsToKeys()
-	}
-	return [14]bool{}
-}
-
-func (rf *ReplayFile) readReplayInputAnalog(i int) [6]int8 {
-	if i >= 0 && i < len(rf.ibit) {
-		remap := sys.inputRemap[i] // we'll be using this a lot
-
-		// New replay file, read in the axes too
-		if remap >= 0 && remap < len(rf.iaxes) {
-			return rf.iaxes[remap]
-		}
-	}
-	return [6]int8{}
-}
-
-func (rf *ReplayFile) AnyButton() bool {
-	for _, b := range rf.ibit {
-		if b&IB_anybutton != 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// Read system variables from replay file
-func (rf *ReplayFile) Synchronize() {
-	if rf.file != nil {
-		// Read random seed
-		var seed int32
-		if err := binary.Read(rf.file, binary.LittleEndian, &seed); err == nil {
-			Srand(seed)
-		}
-
-		// Read pre-match time
-		var pmTime int32
-		if err := binary.Read(rf.file, binary.LittleEndian, &pmTime); err == nil {
-			rf.preMatchTime = pmTime
-			// Advance first frame
-			rf.Update()
-		}
-
-		// Log status
-		log.Printf("Replay synchronized: seed=%d pmTime=%d", seed, pmTime)
-	}
-}
-
-// Read a chunk of inputs from the replay file
-func (rf *ReplayFile) Update() bool {
-	if rf.file == nil {
-		sys.esc = true
-	} else {
-		if sys.oldNextAddTime > 0 {
-			rf.ibit = [REPLAY_NUM_INPUTS]InputBits{}
-			rf.iaxes = [REPLAY_NUM_INPUTS][6]int8{}
-
-			for i := 0; i < len(rf.ibit); i++ {
-				if err := readReplayInput(rf.file, &rf.ibit[i], &rf.iaxes[i]); err != nil {
-					if err == io.EOF || err == io.ErrUnexpectedEOF {
-						log.Printf("Closing replay file")
-					} else {
-						log.Printf("Error while reading replay input for controller %d: %v", i, err)
-					}
-					sys.esc = true
-					break
-				}
-			}
-		}
-
-		if sys.esc {
-			log.Printf("Closing replay file")
-			rf.Close()
-		}
-	}
 	return !sys.gameEnd
 }
 
@@ -3396,12 +3270,15 @@ func (cl *CommandList) InputUpdate(char *Char, controller int) bool {
 		rawAxes := sys.rollback.readRollbackInputAnalog(controller)
 		axes = NormalizeAxes(&rawAxes)
 	} else {
-		// If not AI, replay, or network, then it's a local human player
-		if controller >= 0 {
+		// If not AI, replay, or network, then it's a local human player.
+		if frame, ok := sys.preparedLocalControllerInput(controller); ok && char != nil {
+			buttons = frame.Bits.BitsToKeys()
+			axes = NormalizeAxes(&frame.Axes)
+		} else if controller >= 0 {
 			if controller < len(sys.inputRemap) {
 				in := sys.inputRemap[controller] // remapped input index/config
 				buttons = cl.Buffer.InputReader.LocalInput(in)
-				// Keep analog axes in sync with the same remap used for digital inputs
+				// Keep analog axes in sync with the same remap used for digital inputs.
 				if in >= 0 && in < len(sys.joystickConfig) &&
 					sys.joystickConfig[in].Joy >= 0 &&
 					sys.joystickConfig[in].Joy < input.GetMaxJoystickCount() &&

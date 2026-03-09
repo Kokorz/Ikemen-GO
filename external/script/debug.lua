@@ -38,6 +38,10 @@ addHotkey('F3', true, false, true, false, true, 'toggleMaxPowerMode()')
 addHotkey('F4', false, false, false, false, true, 'roundReset(); closeMenu(); trainingReset()')
 addHotkey('F4', false, false, true, false, true, 'reload(); closeMenu(); trainingReset()')
 addHotkey('F5', false, false, false, false, true, 'setTime(0)')
+addHotkey('F5', true, false, false, false, false, 'trainingTapeCycleSlot()')
+addHotkey('F6', false, false, false, false, false, 'trainingTapeRecordToggle()')
+addHotkey('F7', false, false, false, false, false, 'trainingTapePlaybackToggle()')
+addHotkey('F7', false, false, true, false, false, 'trainingTapeClear()')
 addHotkey('F9', false, false, false, true, false, 'loadState()')
 addHotkey('F10', false, false, false, true, false, 'saveState()')
 addHotkey('SPACE', false, false, false, false, true, 'full(1); full(2); full(3); full(4); full(5); full(6); full(7); full(8); setTime(getRoundTime()); clearConsole()')
@@ -227,4 +231,79 @@ loadDebugInfo({'engineInfo', 'playerInfo', 'actionInfo', 'stateInfo'})
 function loop()
 	hook.run("loop")
 	hook.run("loop#" .. gamemode())
+end
+
+
+
+
+trainingTapeSlot = 1
+
+function trainingTapePath()
+	return string.format('save/inputrecordings/training/slot_%02d.ikt', trainingTapeSlot)
+end
+
+function trainingTapeForceManual()
+	if gamemode() ~= 'training' then return false end
+	player(2)
+	setAILevel(0)
+	mapSet('_iksys_trainingDummyControl', 2)
+	return true
+end
+
+function trainingTapeCycleSlot()
+	if gamemode() ~= 'training' then return end
+	trainingTapeSlot = trainingTapeSlot % 4 + 1
+	printConsole('Training tape slot: ' .. trainingTapeSlot)
+end
+
+function trainingTapeRecordToggle()
+	if gamemode() ~= 'training' then return end
+	local path = trainingTapePath()
+	if inputTapeRecordingActive() and inputTapeRecordingPath() == path then
+		inputTapeStopRecord()
+		printConsole('Training tape saved: ' .. path)
+		return
+	end
+	if inputTapeRecordingActive() then
+		inputTapeStopRecord()
+	end
+	inputTapeStopPlayback(2)
+	trainingTapeForceManual()
+	inputTapeStartRecord(path, 2, 1, true)
+	closeMenu()
+	togglePause(false)
+	printConsole('Recording P2 input to slot ' .. trainingTapeSlot)
+end
+
+function trainingTapePlaybackToggle()
+	if gamemode() ~= 'training' then return end
+	local path = trainingTapePath()
+	if inputTapePlaybackActive(2) then
+		inputTapeStopPlayback(2)
+		printConsole('Training tape playback stopped')
+		return
+	end
+	if not inputTapeExists(path) then
+		printConsole('Training tape slot ' .. trainingTapeSlot .. ' is empty')
+		return
+	end
+	if inputTapeRecordingActive() then
+		inputTapeStopRecord()
+	end
+	trainingTapeForceManual()
+	inputTapeStartPlayback(path, 2, true)
+	closeMenu()
+	togglePause(false)
+	printConsole('Playing training tape slot ' .. trainingTapeSlot)
+end
+
+function trainingTapeClear()
+	if gamemode() ~= 'training' then return end
+	local path = trainingTapePath()
+	if inputTapeRecordingActive() and inputTapeRecordingPath() == path then
+		inputTapeStopRecord()
+	end
+	inputTapeStopPlayback(2)
+	inputTapeDelete(path)
+	printConsole('Cleared training tape slot ' .. trainingTapeSlot)
 end

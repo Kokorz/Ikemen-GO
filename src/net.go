@@ -121,18 +121,23 @@ func (rs *RollbackSession) RecordReplayFrame(time int32, inputs []InputBits, axe
 	frame := int(time)
 	rs.ensureReplayFrame(frame)
 
-	// Always clear the frame first so any overwritten rollback frame keeps zeroes in slots not present in the current input payload.
-	rs.replayInputs[frame] = [REPLAY_NUM_INPUTS]InputBits{}
-	rs.replayAnalogInputs[frame] = [REPLAY_NUM_INPUTS][6]int8{}
+	resolved := resolveReplayControllerFrames(func(source int) (ControllerFrameInput, bool) {
+		if source < 0 {
+			return ControllerFrameInput{}, false
+		}
+		var frameInput ControllerFrameInput
+		if source < len(inputs) {
+			frameInput.Bits = inputs[source]
+		}
+		if source < len(axes) {
+			frameInput.Axes = axes[source]
+		}
+		return frameInput, true
+	})
 
 	for i := 0; i < REPLAY_NUM_INPUTS; i++ {
-		if i < len(inputs) {
-			rs.replayInputs[frame][i] = inputs[i]
-		}
-
-		if i < len(axes) {
-			rs.replayAnalogInputs[frame][i] = axes[i]
-		}
+		rs.replayInputs[frame][i] = resolved[i].Bits
+		rs.replayAnalogInputs[frame][i] = resolved[i].Axes
 	}
 }
 
